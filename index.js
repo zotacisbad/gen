@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-const express = require('express'); // Added for health check endpoint
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
@@ -14,9 +14,6 @@ const client = new Client({
     GatewayIntentBits.GuildPresences,
   ],
 });
-
-// Bot token
-const TOKEN = 'MTM5ODc3MDQwMTk4MjU0NjA4Mg.GqAiIq.7juYK0NwKU22Jmv2qKiFNVepaUynVOtCkqsXU8';
 
 // Authorized user ID
 const AUTHORIZED_USER = '1370374701318410290';
@@ -102,7 +99,7 @@ function parseAccountFile(content, category) {
 // Helper function to generate an account
 function generateAccount(category) {
   if (accounts[category].length === 0) return 'No accounts available in this category.';
-  const account = accounts[category].shift(); // Remove and return the first account
+  const account = accounts[category].shift();
   return JSON.stringify(account, null, 2);
 }
 
@@ -297,7 +294,7 @@ Contact the bot owner for issues.`;
 });
 
 // Handle login errors
-client.login(TOKEN).catch(async error => {
+client.login(process.env.TOKEN).catch(async error => {
   console.error('Failed to login:', error);
   await sendLogToDM(AUTHORIZED_USER, `Bot failed to login: ${error.message}`);
 });
