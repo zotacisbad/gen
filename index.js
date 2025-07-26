@@ -21,11 +21,13 @@ const AUTHORIZED_USER = '1370374701318410290';
 // In-memory storage for categories and accounts
 const categories = [
   'roblox', 'paypal', 'onlyfans', 'steam', 'crunchyroll', 'supercell',
-  'netflix', 'spotify', 'amazon', 'discord', 'fortnite', 'minecraft', 'UHQ',
+  'netflix', 'spotify', 'amazon', 'discord', 'fortnite', 'minecraft',
+  'UHQ', 'Linkden', 'Ubisoft', 'Playstation', 'Activision', 'Xbox',
 ];
 const accounts = {
   roblox: [], paypal: [], onlyfans: [], steam: [], crunchyroll: [], supercell: [],
-  netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [], UHQ: []
+  netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [],
+  UHQ: [], Linkden: [], Ubisoft: [], Playstation: [], Activision: [], Xbox: [],
 };
 
 // Set up Express for health check
