@@ -32,7 +32,7 @@ const accounts = {
 const app = express();
 const port = process.env.PORT || 10000;
 app.get('/health', (req, res) => {
-  res.status(200).send('Bot is running');
+  res.status(200).send(`Bot is running. Discord client status: ${client.isReady() ? 'Online' : 'Offline'}`);
 });
 app.listen(port, () => {
   console.log(`Health check server running on port ${port}`);
@@ -41,10 +41,14 @@ app.listen(port, () => {
 // Helper function to send logs to your DM
 async function sendLogToDM(userId, message) {
   try {
+    if (!client.isReady()) {
+      console.error('Cannot send DM: Bot is not logged in.');
+      return;
+    }
     const user = await client.users.fetch(userId);
     await user.send(message);
   } catch (error) {
-    console.error('Failed to send DM log:', error);
+    console.error('Failed to send DM log:', error.message);
   }
 }
 
@@ -127,7 +131,7 @@ client.on('ready', async () => {
     console.log('Slash commands registered.');
     await sendLogToDM(AUTHORIZED_USER, `Bot started successfully as ${client.user.tag} at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
   } catch (error) {
-    console.error('Failed to register commands:', error);
+    console.error('Failed to register commands:', error.message);
     await sendLogToDM(AUTHORIZED_USER, `Error registering commands: ${error.message}`);
   }
 });
@@ -293,8 +297,13 @@ Contact the bot owner for issues.`;
   }
 });
 
-// Handle login errors
-client.login(process.env.TOKEN).catch(async error => {
-  console.error('Failed to login:', error);
+// Check for token and login
+const TOKEN = process.env.TOKEN;
+if (!TOKEN) {
+  console.error('Error: TOKEN environment variable is not set.');
+  process.exit(1);
+}
+client.login(TOKEN).catch(async error => {
+  console.error('Failed to login:', error.message);
   await sendLogToDM(AUTHORIZED_USER, `Bot failed to login: ${error.message}`);
 });
