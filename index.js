@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const express = require('express');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 // Initialize Discord client with required intents
@@ -25,12 +25,31 @@ const categories = [
   'UHQ', 'Linkden', 'Ubisoft', 'Playstation', 'Activision', 'Xbox',
   'riotgames', 'tradingview', 'creditcards'
 ];
-const accounts = {
-  roblox: [], paypal: [], onlyfans: [], steam: [], crunchyroll: [], supercell: [],
-  netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [],
-  UHQ: [], Linkden: [], Ubisoft: [], Playstation: [], Activision: [], Xbox: [],
-  riotgames: [], tradingview: [], creditcards: []
-};
+let accounts = {};
+
+async function loadStock() {
+  const stockFile = path.join(__dirname, 'stock.json');
+  try {
+    const data = await fs.readFile(stockFile, 'utf8');
+    accounts = JSON.parse(data);
+    categories.forEach(cat => {
+      if (!accounts[cat]) accounts[cat] = [];
+    });
+  } catch (error) {
+    console.log('No stock file found or error loading, initializing empty accounts:', error.message);
+    accounts = Object.fromEntries(categories.map(cat => [cat, []]));
+    await saveStock();
+  }
+}
+
+async function saveStock() {
+  const stockFile = path.join(__dirname, 'stock.json');
+  try {
+    await fs.writeFile(stockFile, JSON.stringify(accounts, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving stock:', error.message);
+  }
+}
 
 // Set up Express for health check
 const app = express();
@@ -97,6 +116,24 @@ function parseAccountFile(content, category) {
     } else if (category === 'minecraft') {
       const [username, password] = line.split(':');
       if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'UHQ') {
+      const [username, password] = line.split(':');
+      if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'Linkden') {
+      const [email, password] = line.split(':');
+      if (email && password) parsedAccounts.push({ email, password });
+    } else if (category === 'Ubisoft') {
+      const [username, password] = line.split(':');
+      if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'Playstation') {
+      const [email, password] = line.split(':');
+      if (email && password) parsedAccounts.push({ email, password });
+    } else if (category === 'Activision') {
+      const [username, password] = line.split(':');
+      if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'Xbox') {
+      const [email, password] = line.split(':');
+      if (email && password) parsedAccounts.push({ email, password });
     } else if (category === 'riotgames') {
       const [username, password] = line.split(':');
       if (username && password) parsedAccounts.push({ username, password });
@@ -128,12 +165,14 @@ function parseAccountFile(content, category) {
 function generateAccount(category) {
   if (accounts[category].length === 0) return 'No accounts available in this category.';
   const account = accounts[category].shift();
+  saveStock();
   return JSON.stringify(account, null, 2);
 }
 
 // Create slash commands
 client.on('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  await loadStock();
   const commands = [
     new SlashCommandBuilder()
       .setName('restock')
@@ -178,12 +217,12 @@ client.on('interactionCreate', async interaction => {
         new StringSelectMenuBuilder()
           .setCustomId('select_category_restock')
           .setPlaceholder('Select a category')
-          .addOptions(categories.map(cat => ({ label: cat, value: cat })))
+          .addOptions(categories.map(cat => ({ label: cat.charAt(0).toUpperCase() + cat.slice(1), value: cat })))
       );
-      await interaction.reply({ content: 'Please select a category to restock:', components: [row], ephemeral: true });
+      await interaction.reply({ content: 'Please upload text files (e.g., roblox.txt) to restock categories:', components: [row], ephemeral: true });
       await sendLogToDM(AUTHORIZED_USER, `${user.tag} initiated /restock command at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     } else if (commandName === 'stock') {
-      const stockList = categories.map(cat => `${cat}: ${accounts[cat].length} accounts`).join('\n');
+      const stockList = categories.map(cat => `${cat.charAt(0).toUpperCase() + cat.slice(1)}: ${accounts[cat].length} accounts`).join('\n');
       await interaction.reply({ content: `**Current Stock:**\n${stockList || 'No accounts available.'}`, ephemeral: true });
       await sendLogToDM(AUTHORIZED_USER, `${user.tag} used /stock command at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.\nOutput:\n${stockList}`);
     } else if (commandName === 'generate') {
@@ -191,7 +230,7 @@ client.on('interactionCreate', async interaction => {
         new StringSelectMenuBuilder()
           .setCustomId('generate_category')
           .setPlaceholder('Select a category')
-          .addOptions(categories.map(cat => ({ label: cat, value: cat })))
+          .addOptions(categories.map(cat => ({ label: cat.charAt(0).toUpperCase() + cat.slice(1), value: cat })))
       );
       await interaction.reply({ content: 'Please select a category to generate an account:', components: [row], ephemeral: true });
       await sendLogToDM(AUTHORIZED_USER, `${user.tag} initiated /generate command at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
@@ -220,34 +259,46 @@ client.on('interactionCreate', async interaction => {
         return;
       }
       const category = values[0];
-      await interaction.reply({ content: `Please upload a text file for ${category}.`, ephemeral: true });
+      await interaction.reply({ content: `Please upload text files (e.g., ${category}.txt) to restock ${category}:`, ephemeral: true });
       const filter = m => m.author.id === user.id && m.attachments.size > 0;
       const collector = interaction.channel.createMessageCollector({ filter, time: 60000, max: 1 });
 
       collector.on('collect', async m => {
-        const attachment = m.attachments.first();
-        if (!attachment.name.endsWith('.txt')) {
-          await m.reply({ content: 'Please upload a .txt file.', ephemeral: true });
-          await sendLogToDM(AUTHORIZED_USER, `${user.tag} uploaded invalid file for ${category} restock at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
-          return;
+        const attachments = m.attachments;
+        let totalAdded = 0;
+        for (const attachment of attachments.values()) {
+          if (!attachment.name.endsWith('.txt')) {
+            await m.reply({ content: `Skipping ${attachment.name}: Not a .txt file.`, ephemeral: true });
+            continue;
+          }
+          try {
+            const response = await fetch(attachment.url);
+            const text = await response.text();
+            const fileCategory = attachment.name.replace('.txt', '').toLowerCase();
+            if (categories.includes(fileCategory)) {
+              const parsed = parseAccountFile(text, fileCategory);
+              accounts[fileCategory].push(...parsed);
+              totalAdded += parsed.length;
+              await saveStock();
+            } else {
+              await m.reply({ content: `${attachment.name} filename does not match a valid category.`, ephemeral: true });
+            }
+          } catch (error) {
+            await m.reply({ content: `Error processing ${attachment.name}: ${error.message}`, ephemeral: true });
+          }
         }
-        try {
-          const response = await fetch(attachment.url);
-          const text = await response.text();
-          const parsed = parseAccountFile(text, category);
-          accounts[category].push(...parsed);
-          await m.reply({ content: `Successfully restocked ${parsed.length} accounts for ${category}.`, ephemeral: true });
-          await sendLogToDM(AUTHORIZED_USER, `${user.tag} restocked ${parsed.length} accounts for ${category} at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
-        } catch (error) {
-          await m.reply({ content: 'Error processing the file. Please try again.', ephemeral: true });
-          await sendLogToDM(AUTHORIZED_USER, `${user.tag} encountered error restocking ${category}: ${error.message}`);
+        if (totalAdded > 0) {
+          await m.reply({ content: `Successfully restocked ${totalAdded} accounts across uploaded files.`, ephemeral: true });
+          await sendLogToDM(AUTHORIZED_USER, `${user.tag} restocked ${totalAdded} accounts at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
+        } else {
+          await m.reply({ content: 'No valid accounts were restocked.', ephemeral: true });
         }
       });
 
       collector.on('end', collected => {
         if (!collected.size) {
-          interaction.followUp({ content: 'No file uploaded in time.', ephemeral: true });
-          sendLogToDM(AUTHORIZED_USER, `${user.tag} failed to upload a file for ${category} restock in time at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
+          interaction.followUp({ content: 'No files uploaded in time.', ephemeral: true });
+          sendLogToDM(AUTHORIZED_USER, `${user.tag} failed to upload files for restock in time at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
         }
       });
     } else if (customId === 'generate_category' || customId === 'panel_generate') {
@@ -336,7 +387,7 @@ client.on('interactionCreate', async interaction => {
     } else if (customId === 'panel_help') {
       const helpMessage = `**Account Generator Help**
 - **Generate an Account**: Use the dropdown to select a category and receive account details in DMs.
-- **/restock**: (Admin only) Upload a text file to restock accounts for a category.
+- **/restock**: (Admin only) Upload text files (e.g., roblox.txt) to restock categories.
 - **/stock**: View the number of accounts in each category.
 - **/generate**: Generate an account directly via command.
 - **/panel**: (Admin only) Create a panel like this one in a chosen channel.
@@ -346,6 +397,7 @@ Contact the bot owner for issues.`;
       await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} viewed help via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     } else if (customId === 'panel_clear' && user.id === AUTHORIZED_USER) {
       categories.forEach(cat => accounts[cat] = []);
+      await saveStock();
       await interaction.reply({ content: 'All account stocks have been cleared.', ephemeral: true });
       await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} cleared all account stocks via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     }
@@ -361,4 +413,8 @@ if (!TOKEN) {
 client.login(TOKEN).catch(async error => {
   console.error('Failed to login:', error.message);
   await sendLogToDM(AUTHORIZED_USER, `Bot failed to login: ${error.message}`);
+});
+
+client.on('ready', () => {
+  console.log('Bot is fully ready and stock is loaded.');
 });
