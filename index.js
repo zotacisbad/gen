@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -23,11 +23,13 @@ const categories = [
   'roblox', 'paypal', 'onlyfans', 'steam', 'crunchyroll', 'supercell',
   'netflix', 'spotify', 'amazon', 'discord', 'fortnite', 'minecraft',
   'UHQ', 'Linkden', 'Ubisoft', 'Playstation', 'Activision', 'Xbox',
+  'riotgames', 'tradingview', 'creditcards'
 ];
 const accounts = {
   roblox: [], paypal: [], onlyfans: [], steam: [], crunchyroll: [], supercell: [],
   netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [],
   UHQ: [], Linkden: [], Ubisoft: [], Playstation: [], Activision: [], Xbox: [],
+  riotgames: [], tradingview: [], creditcards: []
 };
 
 // Set up Express for health check
@@ -95,6 +97,26 @@ function parseAccountFile(content, category) {
     } else if (category === 'minecraft') {
       const [username, password] = line.split(':');
       if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'riotgames') {
+      const [username, password] = line.split(':');
+      if (username && password) parsedAccounts.push({ username, password });
+    } else if (category === 'tradingview') {
+      const [email, password] = line.split(':');
+      if (email && password) parsedAccounts.push({ email, password });
+    } else if (category === 'creditcards') {
+      const parts = line.split(' | ');
+      const account = {};
+      for (const part of parts) {
+        const [key, value] = part.split(' = ');
+        if (key === 'card_no') {
+          account[key] = value.split(', ').map(num => num.trim());
+        } else if (key && value) {
+          account[key] = value;
+        }
+      }
+      if (account.first_name && account.last_name && account.card_no) {
+        parsedAccounts.push(account);
+      }
     } else {
       parsedAccounts.push({ raw: line });
     }
@@ -142,7 +164,7 @@ client.on('ready', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand() && !interaction.isStringSelectMenu() && !interaction.isButton()) return;
 
-  const { user } = interaction;
+  const { user, channel } = interaction;
 
   if (interaction.isCommand()) {
     const { commandName } = interaction;
@@ -231,8 +253,13 @@ client.on('interactionCreate', async interaction => {
     } else if (customId === 'generate_category' || customId === 'panel_generate') {
       const category = values[0];
       const account = generateAccount(category);
-      await interaction.reply({ content: `**Generated Account (${category}):**\n\`\`\`json\n${account}\n\`\`\``, ephemeral: true });
-      await sendLogToDM(AUTHORIZED_USER, `${user.tag} generated an account from ${category} at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}: ${account}`);
+      if (account !== 'No accounts available in this category.') {
+        await user.send(`**Generated ${category.toUpperCase()} Account:**\n\`\`\`json\n${account}\n\`\`\``);
+        await channel.send(`@${user.tag} A ${category} account has been sent to your DMs`);
+        await sendLogToDM(AUTHORIZED_USER, `${user.tag} generated an account from ${category} at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}: ${account}`);
+      } else {
+        await interaction.reply({ content: account, ephemeral: true });
+      }
     } else if (customId === 'select_channel_panel') {
       if (user.id !== AUTHORIZED_USER) {
         await interaction.reply({ content: 'You are not authorized to perform this action.', ephemeral: true });
@@ -249,29 +276,47 @@ client.on('interactionCreate', async interaction => {
       const generateMenu = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('panel_generate')
-          .setPlaceholder('Generate an Account')
-          .addOptions(categories.map(cat => ({ label: cat, value: cat })))
+          .setPlaceholder('Select a Category')
+          .setMaxValues(1)
+          .addOptions(categories.map(cat => ({ label: cat.charAt(0).toUpperCase() + cat.slice(1), value: cat })))
       );
 
-      const stockButton = new ActionRowBuilder().addComponents(
+      const actionRow1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('panel_stock')
-          .setLabel('Stock')
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      const helpButton = new ActionRowBuilder().addComponents(
+          .setLabel('View Stock')
+          .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-          .setCustomId('panel_help')
-          .setLabel('Help')
+          .setCustomId('panel_refresh')
+          .setLabel('Refresh Stock')
           .setStyle(ButtonStyle.Secondary)
       );
 
+      const actionRow2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('panel_help')
+          .setLabel('Help')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('panel_clear')
+          .setLabel('Clear Logs')
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      const embed = new EmbedBuilder()
+        .setTitle('Account Generator Panel')
+        .setDescription('Welcome to the enhanced account generator! Use the dropdown to generate an account or click the buttons below for additional actions.')
+        .addFields(
+          { name: 'Categories', value: categories.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(', '), inline: true },
+          { name: 'Stock Status', value: 'Click "View Stock" to check availability.', inline: true }
+        )
+        .setColor('#00ff00')
+        .setThumbnail('https://i.imgur.com/AfFp7pu.png') // Placeholder image URL
+        .setTimestamp()
+        .setFooter({ text: 'Powered by Your Bot', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+
       try {
-        await channel.send({
-          content: '**Account Generator Panel**\nUse the dropdown to generate an account, or click the buttons below for stock or help.',
-          components: [generateMenu, stockButton, helpButton],
-        });
+        await channel.send({ embeds: [embed], components: [generateMenu, actionRow1, actionRow2] });
         await interaction.reply({ content: `Generation panel created in ${channel.name}.`, ephemeral: true });
         await sendLogToDM(AUTHORIZED_USER, `${user.tag} created a generation panel in ${channel.name} at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
       } catch (error) {
@@ -282,19 +327,27 @@ client.on('interactionCreate', async interaction => {
   } else if (interaction.isButton()) {
     const { customId } = interaction;
     if (customId === 'panel_stock') {
-      const stockList = categories.map(cat => `${cat}: ${accounts[cat].length} accounts`).join('\n');
+      const stockList = categories.map(cat => `${cat.charAt(0).toUpperCase() + cat.slice(1)}: ${accounts[cat].length} accounts`).join('\n');
       await interaction.reply({ content: `**Current Stock:**\n${stockList || 'No accounts available.'}`, ephemeral: true });
-      await sendLogToDM(AUTHORIZED_USER, `${user.tag} checked stock via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}: ${stockList}`);
+      await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} checked stock via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}: ${stockList}`);
+    } else if (customId === 'panel_refresh') {
+      await interaction.reply({ content: 'Stock refreshed. Use "View Stock" to check the latest counts.', ephemeral: true });
+      await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} refreshed stock via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     } else if (customId === 'panel_help') {
       const helpMessage = `**Account Generator Help**
-- **Generate an Account**: Use the dropdown to select a category and receive account details.
+- **Generate an Account**: Use the dropdown to select a category and receive account details in DMs.
 - **/restock**: (Admin only) Upload a text file to restock accounts for a category.
 - **/stock**: View the number of accounts in each category.
 - **/generate**: Generate an account directly via command.
 - **/panel**: (Admin only) Create a panel like this one in a chosen channel.
+- **Buttons**: View Stock, Refresh Stock, Help, Clear Logs (admin only).
 Contact the bot owner for issues.`;
       await interaction.reply({ content: helpMessage, ephemeral: true });
-      await sendLogToDM(AUTHORIZED_USER, `${user.tag} viewed help via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
+      await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} viewed help via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
+    } else if (customId === 'panel_clear' && user.id === AUTHORIZED_USER) {
+      categories.forEach(cat => accounts[cat] = []);
+      await interaction.reply({ content: 'All account stocks have been cleared.', ephemeral: true });
+      await sendLogToDM(AUTHORIZED_USER, `${interaction.user.tag} cleared all account stocks via panel at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     }
   }
 });
