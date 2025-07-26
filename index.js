@@ -216,10 +216,10 @@ client.on('interactionCreate', async interaction => {
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('select_category_restock')
-          .setPlaceholder('Select a category')
+          .setPlaceholder('Select a category (optional)')
           .addOptions(categories.map(cat => ({ label: cat.charAt(0).toUpperCase() + cat.slice(1), value: cat })))
       );
-      await interaction.reply({ content: 'Please upload text files (e.g., roblox.txt) to restock categories:', components: [row], ephemeral: true });
+      await interaction.reply({ content: 'Upload one or more text files (e.g., paypal.txt) to restock. Select a category to filter, or leave blank for auto-detection:', components: [row], ephemeral: true });
       await sendLogToDM(AUTHORIZED_USER, `${user.tag} initiated /restock command at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}.`);
     } else if (commandName === 'stock') {
       const stockList = categories.map(cat => `${cat.charAt(0).toUpperCase() + cat.slice(1)}: ${accounts[cat].length} accounts`).join('\n');
@@ -258,28 +258,40 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: 'You are not authorized to perform this action.', ephemeral: true });
         return;
       }
-      const category = values[0];
-      await interaction.reply({ content: `Please upload text files (e.g., ${category}.txt) to restock ${category}:`, ephemeral: true });
+      const selectedCategory = values[0] || null;
+      await interaction.reply({ content: `Please upload one or more text files (e.g., ${selectedCategory || 'any_category'}.txt) to restock ${selectedCategory ? selectedCategory : 'all matching categories'}:`, ephemeral: true });
       const filter = m => m.author.id === user.id && m.attachments.size > 0;
       const collector = interaction.channel.createMessageCollector({ filter, time: 60000, max: 1 });
 
       collector.on('collect', async m => {
         const attachments = m.attachments;
         let totalAdded = 0;
+        const processedFiles = new Set();
+
         for (const attachment of attachments.values()) {
           if (!attachment.name.endsWith('.txt')) {
             await m.reply({ content: `Skipping ${attachment.name}: Not a .txt file.`, ephemeral: true });
             continue;
           }
+          if (processedFiles.has(attachment.name)) {
+            await m.reply({ content: `Skipping duplicate file ${attachment.name}.`, ephemeral: true });
+            continue;
+          }
+          processedFiles.add(attachment.name);
+
           try {
             const response = await fetch(attachment.url);
             const text = await response.text();
             const fileCategory = attachment.name.replace('.txt', '').toLowerCase();
             if (categories.includes(fileCategory)) {
-              const parsed = parseAccountFile(text, fileCategory);
-              accounts[fileCategory].push(...parsed);
-              totalAdded += parsed.length;
-              await saveStock();
+              if (!selectedCategory || fileCategory === selectedCategory) {
+                const parsed = parseAccountFile(text, fileCategory);
+                accounts[fileCategory].push(...parsed);
+                totalAdded += parsed.length;
+                await saveStock();
+              } else {
+                await m.reply({ content: `${attachment.name} skipped: Does not match selected category ${selectedCategory}.`, ephemeral: true });
+              }
             } else {
               await m.reply({ content: `${attachment.name} filename does not match a valid category.`, ephemeral: true });
             }
@@ -387,7 +399,7 @@ client.on('interactionCreate', async interaction => {
     } else if (customId === 'panel_help') {
       const helpMessage = `**Account Generator Help**
 - **Generate an Account**: Use the dropdown to select a category and receive account details in DMs.
-- **/restock**: (Admin only) Upload text files (e.g., roblox.txt) to restock categories.
+- **/restock**: (Admin only) Upload text files (e.g., paypal.txt) to restock categories.
 - **/stock**: View the number of accounts in each category.
 - **/generate**: Generate an account directly via command.
 - **/panel**: (Admin only) Create a panel like this one in a chosen channel.
