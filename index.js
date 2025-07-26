@@ -25,7 +25,7 @@ const categories = [
 ];
 const accounts = {
   roblox: [], paypal: [], onlyfans: [], steam: [], crunchyroll: [], supercell: [],
-  netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [], UHQ []
+  netflix: [], spotify: [], amazon: [], discord: [], fortnite: [], minecraft: [], UHQ: []
 };
 
 // Set up Express for health check
